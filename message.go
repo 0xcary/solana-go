@@ -91,7 +91,7 @@ type Message struct {
 	// List of base-58 encoded public keys used by the transaction,
 	// including by the instructions and for signatures.
 	// The first `message.header.numRequiredSignatures` public keys must sign the transaction.
-	AccountKeys []PublicKey `json:"accountKeys"` // static keys; static keys + dynamic keys if after resolution (i.e. call to `ResolveLookups()`)
+	AccountKeys PublicKeySlice `json:"accountKeys"` // static keys; static keys + dynamic keys if after resolution (i.e. call to `ResolveLookups()`)
 
 	// Details the account types and signatures required by the transaction.
 	Header MessageHeader `json:"header"`
@@ -415,13 +415,13 @@ func (mx *Message) UnmarshalBase64(b64 string) error {
 // in the actual address tables, and returns the accounts.
 // NOTE: you need to call `SetAddressTables` before calling this method,
 // so that the lookups can be associated with the accounts in the address tables.
-func (mx Message) GetAddressTableLookupAccounts() ([]PublicKey, error) {
+func (mx Message) GetAddressTableLookupAccounts() (PublicKeySlice, error) {
 	err := mx.checkPreconditions()
 	if err != nil {
 		return nil, err
 	}
-	var writable []PublicKey
-	var readonly []PublicKey
+	var writable PublicKeySlice
+	var readonly PublicKeySlice
 
 	for _, lookup := range mx.AddressTableLookups {
 		table, ok := mx.addressTables[lookup.AccountKey]
@@ -461,6 +461,23 @@ func (mx *Message) ResolveLookups() (err error) {
 	mx.resolved = true
 
 	return nil
+}
+
+var ErrAlreadyResolved = fmt.Errorf("lookups already resolved")
+
+// ResolveLookupsWith resolves the address table lookups with the provided writable and readonly accounts,
+// assuming that the order of the accounts is correct.
+func (mx *Message) ResolveLookupsWith(writable, readonly PublicKeySlice) (err error) {
+	if mx.resolved {
+		return ErrAlreadyResolved
+	}
+	mx.AccountKeys = append(mx.AccountKeys, append(writable, readonly...)...)
+	mx.resolved = true
+	return nil
+}
+
+func (mx Message) IsResolved() bool {
+	return mx.resolved
 }
 
 // GetAllKeys returns ALL the message's account keys (including the keys from resolved address lookup tables).
@@ -571,7 +588,7 @@ func (mx *Message) UnmarshalLegacy(decoder *bin.Decoder) (err error) {
 		if numAccountKeys > decoder.Remaining()/32 {
 			return fmt.Errorf("numAccountKeys %d is too large for remaining bytes %d", numAccountKeys, decoder.Remaining())
 		}
-		mx.AccountKeys = make([]PublicKey, numAccountKeys)
+		mx.AccountKeys = make(PublicKeySlice, numAccountKeys)
 		for i := 0; i < numAccountKeys; i++ {
 			_, err := decoder.Read(mx.AccountKeys[i][:])
 			if err != nil {
@@ -814,6 +831,29 @@ func (m Message) isWritableInLookups(idx int) bool {
 	return idx-m.numStaticAccounts() < m.AddressTableLookups.NumWritableLookups()
 }
 
+// IsWritableStatic checks if the account is a writable account in the static accounts list, ignoring the accounts in the address table lookups.
+func (m *Message) IsWritableStatic(account PublicKey) bool {
+	// check only the static accounts (i.e. not the ones in the address table lookups); no check preconditions needed.
+	accountKeys := m.getStaticKeys()
+	index := 0
+	found := false
+	for idx, acc := range accountKeys {
+		if acc.Equals(account) {
+			found = true
+			index = idx
+		}
+	}
+	if !found {
+		return false
+	}
+	h := m.Header
+	if index >= int(h.NumRequiredSignatures) {
+		// unsignedAccountIndex < numWritableUnsignedAccounts
+		return index-int(h.NumRequiredSignatures) < (m.numStaticAccounts()-int(h.NumRequiredSignatures))-int(h.NumReadonlyUnsignedAccounts)
+	}
+	return index < int(h.NumRequiredSignatures-h.NumReadonlySignedAccounts)
+}
+
 func (m Message) IsWritable(account PublicKey) (bool, error) {
 	err := m.checkPreconditions()
 	if err != nil {
@@ -833,7 +873,7 @@ func (m Message) IsWritable(account PublicKey) (bool, error) {
 		}
 	}
 	if !found {
-		return false, err
+		return false, nil
 	}
 	h := m.Header
 
@@ -846,7 +886,7 @@ func (m Message) IsWritable(account PublicKey) (bool, error) {
 	return index < int(h.NumRequiredSignatures-h.NumReadonlySignedAccounts), nil
 }
 
-func (m Message) signerKeys() []PublicKey {
+func (m Message) signerKeys() PublicKeySlice {
 	return m.AccountKeys[0:m.Header.NumRequiredSignatures]
 }
 

@@ -153,6 +153,8 @@ type TokenBalance struct {
 
 	// Pubkey of token balance's owner.
 	Owner *solana.PublicKey `json:"owner,omitempty"`
+	// Pubkey of token program.
+	ProgramId *solana.PublicKey `json:"programId,omitempty"`
 
 	// Pubkey of the token's mint.
 	Mint          solana.PublicKey `json:"mint"`
@@ -215,8 +217,15 @@ type TransactionMeta struct {
 	Rewards []BlockReward `json:"rewards"`
 
 	LoadedAddresses LoadedAddresses `json:"loadedAddresses"`
-	
+
+	ReturnData ReturnData `json:"returnData"`
+
 	ComputeUnitsConsumed *uint64 `json:"computeUnitsConsumed"`
+}
+
+type ReturnData struct {
+	ProgramId solana.PublicKey `json:"programId"`
+	Data      solana.Data      `json:"data"`
 }
 
 type InnerInstruction struct {
@@ -225,7 +234,24 @@ type InnerInstruction struct {
 	Index uint16 `json:"index"`
 
 	// Ordered list of inner program instructions that were invoked during a single transaction instruction.
-	Instructions []solana.CompiledInstruction `json:"instructions"`
+	Instructions []CompiledInstruction `json:"instructions"`
+}
+
+type CompiledInstruction struct {
+	// Index into the message.accountKeys array indicating the program account that executes this instruction.
+	// NOTE: it is actually a uint8, but using a uint16 because uint8 is treated as a byte everywhere,
+	// and that can be an issue.
+	ProgramIDIndex uint16 `json:"programIdIndex"`
+
+	// List of ordered indices into the message.accountKeys array indicating which accounts to pass to the program.
+	// NOTE: it is actually a []uint8, but using a uint16 because []uint8 is treated as a []byte everywhere,
+	// and that can be an issue.
+	Accounts []uint16 `json:"accounts"`
+
+	// The program input data encoded in a base-58 string.
+	Data solana.Base58 `json:"data"`
+
+	StackHeight uint16 `json:"stackHeight"`
 }
 
 // Ok  interface{} `json:"Ok"`  // <null> Transaction was successful
@@ -296,6 +322,9 @@ type Account struct {
 
 	// The epoch at which this account will next owe rent
 	RentEpoch *big.Int `json:"rentEpoch"`
+
+	// The amount of storage space required to store the token account
+	Space uint64 `json:"space"`
 }
 
 type DataBytesOrJSON struct {
@@ -367,6 +396,9 @@ func (wrap *DataBytesOrJSON) UnmarshalJSON(data []byte) error {
 // GetBinary returns the decoded bytes if the encoding is
 // "base58", "base64", or "base64+zstd".
 func (dt *DataBytesOrJSON) GetBinary() []byte {
+	if dt == nil {
+		return nil
+	}
 	return dt.asDecodedBinary.Content
 }
 
@@ -498,11 +530,12 @@ type ParsedMessage struct {
 }
 
 type ParsedInstruction struct {
-	Program   string                   `json:"program,omitempty"`
-	ProgramId solana.PublicKey         `json:"programId,omitempty"`
-	Parsed    *InstructionInfoEnvelope `json:"parsed,omitempty"`
-	Data      solana.Base58            `json:"data,omitempty"`
-	Accounts  []solana.PublicKey       `json:"accounts,omitempty"`
+	Program     string                   `json:"program,omitempty"`
+	ProgramId   solana.PublicKey         `json:"programId,omitempty"`
+	Parsed      *InstructionInfoEnvelope `json:"parsed,omitempty"`
+	Data        solana.Base58            `json:"data,omitempty"`
+	Accounts    []solana.PublicKey       `json:"accounts,omitempty"`
+	StackHeight int64                    `json:"stackHeight"`
 }
 
 type InstructionInfoEnvelope struct {

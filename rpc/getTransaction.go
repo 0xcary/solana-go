@@ -50,7 +50,7 @@ func (cl *Client) GetTransaction(
 				opts.Encoding,
 				// Valid encodings:
 				// solana.EncodingJSON, // TODO
-				// solana.EncodingJSONParsed, // TODO
+				solana.EncodingJSONParsed, // TODO
 				solana.EncodingBase58,
 				solana.EncodingBase64,
 				solana.EncodingBase64Zstd,
@@ -231,6 +231,16 @@ func (obj GetTransactionResult) MarshalWithEncoder(encoder *bin.Encoder) (err er
 			}
 		}
 	}
+	{
+		buf, err := json.Marshal(obj.Version)
+		if err != nil {
+			return err
+		}
+		err = encoder.WriteBytes(buf, true)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -281,6 +291,16 @@ func (obj *GetTransactionResult) UnmarshalWithDecoder(decoder *bin.Decoder) (err
 			if err != nil {
 				return err
 			}
+		}
+	}
+	{
+		buf, err := decoder.ReadByteSlice()
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(buf, &obj.Version)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

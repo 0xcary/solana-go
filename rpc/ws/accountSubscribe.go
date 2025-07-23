@@ -15,17 +15,17 @@
 package ws
 
 import (
+	"context"
+
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 )
 
 type AccountResult struct {
 	Context struct {
-		Slot uint64
+		Slot uint64 `json:"slot"`
 	} `json:"context"`
-	Value struct {
-		rpc.Account
-	} `json:"value"`
+	Value *rpc.Account `json:"value"`
 }
 
 // AccountSubscribe subscribes to an account to receive notifications
@@ -83,9 +83,14 @@ type AccountSubscription struct {
 	sub *Subscription
 }
 
-func (sw *AccountSubscription) Recv() (*AccountResult, error) {
+func (sw *AccountSubscription) Recv(ctx context.Context) (*AccountResult, error) {
 	select {
-	case d := <-sw.sub.stream:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case d, ok := <-sw.sub.stream:
+		if !ok {
+			return nil, ErrSubscriptionClosed
+		}
 		return d.(*AccountResult), nil
 	case err := <-sw.sub.err:
 		return nil, err

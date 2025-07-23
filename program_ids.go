@@ -39,6 +39,9 @@ var (
 	FeatureProgramID = MustPublicKeyFromBase58("Feature111111111111111111111111111111111111")
 
 	ComputeBudget = MustPublicKeyFromBase58("ComputeBudget111111111111111111111111111111")
+
+	// Create and manage address lookup tables.
+	AddressLookupTableProgramID = MustPublicKeyFromBase58("AddressLookupTab1e1111111111111111111111111")
 )
 
 // SPL:
@@ -46,6 +49,8 @@ var (
 	// A Token program on the Solana blockchain.
 	// This program defines a common implementation for Fungible and Non Fungible tokens.
 	TokenProgramID = MustPublicKeyFromBase58("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+
+	Token2022ProgramID = MustPublicKeyFromBase58("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
 
 	// A Uniswap-like exchange for the Token program on the Solana blockchain,
 	// implementing multiple automated market maker (AMM) curves.
@@ -74,6 +79,4 @@ var (
 	WrappedSol = SolMint
 )
 
-var (
-	TokenMetadataProgramID = MustPublicKeyFromBase58("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
-)
+var TokenMetadataProgramID = MustPublicKeyFromBase58("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
