@@ -23,7 +23,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	"github.com/gagliardetto/solana-go/rpc/jsonrpc"
@@ -38,7 +37,6 @@ var (
 type Client struct {
 	rpcURL    string
 	rpcClient JSONRPCClient
-	headerFn  atomic.Value
 }
 
 type JSONRPCClient interface {
@@ -67,6 +65,35 @@ func NewWithHeaders(rpcEndpoint string, headers map[string]string) *Client {
 	}
 	rpcClient := jsonrpc.NewClientWithOpts(rpcEndpoint, opts)
 	return NewWithCustomRPCClient(rpcClient)
+}
+
+// SetHeader dynamically adds or modifies a header for the current client.
+func (cl *Client) SetHeader(key, value string) {
+
+	if rc, ok := cl.rpcClient.(interface {
+		SetHeader(key, value string)
+	}); ok {
+		rc.SetHeader(key, value)
+	}
+}
+
+// RemoveHeader dynamically removes a header for the current client.
+func (cl *Client) RemoveHeader(key string) {
+	if rc, ok := cl.rpcClient.(interface {
+		RemoveHeader(key string)
+	}); ok {
+		rc.RemoveHeader(key)
+	}
+}
+
+// GetHeaders retrieves all headers currently set for the client.
+func (cl *Client) GetHeaders() map[string]string {
+	if rc, ok := cl.rpcClient.(interface {
+		GetHeaders() map[string]string
+	}); ok {
+		return rc.GetHeaders()
+	}
+	return nil
 }
 
 // Close closes the client.
@@ -150,59 +177,4 @@ func NewBoolean(b bool) *bool {
 
 func NewTransactionVersion(v uint64) *uint64 {
 	return &v
-}
-
-type HeaderRoundTripper struct {
-	Base    http.RoundTripper
-	Headers func() map[string]string
-}
-
-func (h *HeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	for k, v := range h.Headers() {
-		req.Header.Set(k, v)
-	}
-	return h.Base.RoundTrip(req)
-}
-
-func newHTTPWithHeaderFn(headerFn func() map[string]string) *http.Client {
-	baseTransport := newHTTPTransport()
-
-	transport := &HeaderRoundTripper{
-		Base:    gzhttp.Transport(baseTransport),
-		Headers: headerFn,
-	}
-
-	return &http.Client{
-		Timeout:   defaultTimeout,
-		Transport: transport,
-	}
-}
-
-func NewWithDynamicHeaders(rpcEndpoint string) *Client {
-	client := &Client{}
-
-	// default header function is nil
-	// it will be set later by the user.
-	client.headerFn.Store(func() map[string]string {
-		return map[string]string{}
-	})
-
-	httpClient := newHTTPWithHeaderFn(func() map[string]string {
-		if v := client.headerFn.Load(); v != nil {
-			if f, ok := v.(func() map[string]string); ok {
-				return f()
-			}
-		}
-		return nil
-	})
-
-	rpcClient := jsonrpc.NewClientWithOpts(rpcEndpoint, &jsonrpc.RPCClientOpts{
-		HTTPClient: httpClient,
-	})
-	client.rpcClient = rpcClient
-	return client
-}
-
-func (cl *Client) SetHeaderFunc(f func() map[string]string) {
-	cl.headerFn.Store(f)
 }

@@ -24,6 +24,8 @@ import (
 	stdjson "encoding/json"
 	"fmt"
 	"math/big"
+	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/AlekSi/pointer"

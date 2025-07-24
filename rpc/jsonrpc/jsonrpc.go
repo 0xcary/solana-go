@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sync"
 	"sync/atomic"
 
 	"github.com/davecgh/go-spew/spew"
@@ -276,6 +277,7 @@ type rpcClient struct {
 	endpoint      string
 	httpClient    HTTPClient
 	customHeaders map[string]string
+	headersMutex  sync.RWMutex
 }
 
 // RPCClientOpts can be provided to NewClientWithOpts() to change configuration of RPCClient.
@@ -349,10 +351,16 @@ func NewClient(endpoint string) RPCClient {
 //
 // opts: RPCClientOpts provide custom configuration
 func NewClientWithOpts(endpoint string, opts *RPCClientOpts) RPCClient {
+	if endpoint == "" {
+		panic("endpoint must not be empty")
+	}
+
+	// create the rpcClient and set default values
 	rpcClient := &rpcClient{
 		endpoint:      endpoint,
 		httpClient:    &http.Client{},
 		customHeaders: make(map[string]string),
+		headersMutex:  sync.RWMutex{},
 	}
 
 	if opts == nil {
@@ -372,10 +380,32 @@ func NewClientWithOpts(endpoint string, opts *RPCClientOpts) RPCClient {
 	return rpcClient
 }
 
-func (client *rpcClient) SetCustomHeaders(headers map[string]string) {
-	for k, v := range headers {
-		client.customHeaders[k] = v
+// SetHeader can be used to dynamically add or modify a header for the current client.
+func (r *rpcClient) SetHeader(key, value string) {
+	r.headersMutex.Lock()
+	defer r.headersMutex.Unlock()
+	if r.customHeaders == nil {
+		r.customHeaders = make(map[string]string)
 	}
+	r.customHeaders[key] = value
+}
+
+// RemoveHeader can be used to dynamically remove a header for the current client.
+func (r *rpcClient) RemoveHeader(key string) {
+	r.headersMutex.Lock()
+	defer r.headersMutex.Unlock()
+	delete(r.customHeaders, key)
+}
+
+// GetHeaders returns a copy of the current headers set for the client.
+func (r *rpcClient) GetHeaders() map[string]string {
+	r.headersMutex.RLock()
+	defer r.headersMutex.RUnlock()
+	copied := make(map[string]string, len(r.customHeaders))
+	for k, v := range r.customHeaders {
+		copied[k] = v
+	}
+	return copied
 }
 
 func (client *rpcClient) Call(ctx context.Context, method string, params ...interface{}) (*RPCResponse, error) {
@@ -497,6 +527,8 @@ func (client *rpcClient) newRequest(ctx context.Context, req interface{}) (*http
 	request.Header.Set("Accept", "application/json")
 
 	// set default headers first, so that even content type and accept can be overwritten
+	client.headersMutex.RLock()
+	defer client.headersMutex.RUnlock()
 	for k, v := range client.customHeaders {
 		request.Header.Set(k, v)
 	}
