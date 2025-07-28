@@ -67,35 +67,6 @@ func NewWithHeaders(rpcEndpoint string, headers map[string]string) *Client {
 	return NewWithCustomRPCClient(rpcClient)
 }
 
-// SetHeader dynamically adds or modifies a header for the current client.
-func (cl *Client) SetHeader(key, value string) {
-
-	if rc, ok := cl.rpcClient.(interface {
-		SetHeader(key, value string)
-	}); ok {
-		rc.SetHeader(key, value)
-	}
-}
-
-// RemoveHeader dynamically removes a header for the current client.
-func (cl *Client) RemoveHeader(key string) {
-	if rc, ok := cl.rpcClient.(interface {
-		RemoveHeader(key string)
-	}); ok {
-		rc.RemoveHeader(key)
-	}
-}
-
-// GetHeaders retrieves all headers currently set for the client.
-func (cl *Client) GetHeaders() map[string]string {
-	if rc, ok := cl.rpcClient.(interface {
-		GetHeaders() map[string]string
-	}); ok {
-		return rc.GetHeaders()
-	}
-	return nil
-}
-
 // Close closes the client.
 func (cl *Client) Close() error {
 	if cl.rpcClient == nil {
