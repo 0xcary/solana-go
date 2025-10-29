@@ -7,6 +7,7 @@ import (
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"sync/atomic"
@@ -582,22 +583,21 @@ func (client *rpcClient) doCallWithCallbackOnHTTPResponse(
 	httpRequest, err := client.newRequest(ctx, RPCRequest)
 	if err != nil {
 		return err
-		//if httpRequest != nil {
-		//	return fmt.Errorf("rpc call %v() on %v: %w", RPCRequest.Method, httpRequest.URL.String(), err)
-		//}
-		//return fmt.Errorf("rpc call %v(): %w", RPCRequest.Method, err)
 	}
 	httpResponse, err := client.httpClient.Do(httpRequest)
 	if err != nil {
 		return err
 	}
+	defer httpResponse.Body.Close()
+
+	// allow callback to process first (regardless of status code)
+	if err := callback(httpRequest, httpResponse); err != nil {
+		return err
+	}
+
+	// if HTTP status code is not 2xx, return HTTPError additionally
 	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
-		var buf bytes.Buffer
-		var body []byte
-		if _, err := buf.ReadFrom(httpResponse.Body); err == nil {
-			body = buf.Bytes()
-		}
-		httpResponse.Body.Close()
+		body, _ := io.ReadAll(io.LimitReader(httpResponse.Body, 4<<10)) // 最多4KB
 		return HTTPError{
 			Status:     httpResponse.Status,
 			StatusCode: httpResponse.StatusCode,
@@ -605,12 +605,7 @@ func (client *rpcClient) doCallWithCallbackOnHTTPResponse(
 		}
 	}
 
-	//if err != nil {
-	//	return fmt.Errorf("rpc call %v() on %v: %w", RPCRequest.Method, httpRequest.URL.String(), err)
-	//}
-	//defer httpResponse.Body.Close()
-
-	return callback(httpRequest, httpResponse)
+	return nil
 }
 
 func (client *rpcClient) doBatchCall(ctx context.Context, rpcRequest []*RPCRequest) ([]*RPCResponse, error) {
